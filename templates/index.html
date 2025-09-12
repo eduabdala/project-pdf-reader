@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de PDFs</title>
+</head>
+<body>
+    <h1>Arquivos PDF disponíveis</h1>
+    <ul>
+        {% for pdf in pdf_files %}
+        <li><a href="{{ url_for('reader', pdf_name=pdf) }}">{{ pdf }}</a></li>
+        {% else %}
+        <li>Nenhum PDF encontrado na pasta <code>static/pdfs</code>.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

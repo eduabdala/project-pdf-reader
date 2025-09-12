@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Leitor de PDF</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      #controls {
+        position: fixed; /* fixo no topo */
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 10px;
+        background: #f0f0f0;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        z-index: 1000; /* fica acima do canvas */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      }
+      canvas {
+        display: block;
+        margin: 80px auto 20px auto; /* margem top para o menu fixo */
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <button id="back">⬅ Voltar</button>
+      <button id="prev">Anterior</button>
+      <span>
+        Página: <span id="page_num"></span> / <span id="page_count"></span>
+      </span>
+      <button id="next">Próxima</button>
+      |
+      <button id="zoom_in">🔍+</button>
+      <button id="zoom_out">🔍-</button>
+    </div>
+
+    <canvas id="the-canvas"></canvas>
+
+    <script src="{{ url_for('static', filename='pdfjs/pdf.js') }}"></script>
+    <script>
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "{{ url_for('static', filename='pdfjs/pdf.worker.js') }}";
+
+      const url = "/static/pdfs/{{ pdf_name }}";
+
+      let pdfDoc = null,
+          pageNum = {{ last_page }},
+          pageRendering = false,
+          pageNumPending = null,
+          scale = 1.2,
+          canvas = document.getElementById('the-canvas'),
+          ctx = canvas.getContext('2d');
+
+      function renderPage(num) {
+        pageRendering = true;
+        pdfDoc.getPage(num).then(function(page) {
+          const viewport = page.getViewport({ scale: scale });
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          const renderContext = { canvasContext: ctx, viewport: viewport };
+          const renderTask = page.render(renderContext);
+
+          renderTask.promise.then(function () {
+            pageRendering = false;
+            document.getElementById('page_num').textContent = num;
+            if (pageNumPending !== null) {
+              renderPage(pageNumPending);
+              pageNumPending = null;
+            }
+            fetch('/save_progress', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ pdf_name: "{{ pdf_name }}", page: num })
+            });
+          });
+        });
+      }
+
+      function queueRenderPage(num) {
+        if (pageRendering) pageNumPending = num;
+        else renderPage(num);
+      }
+
+      function onPrevPage() { if (pageNum > 1) { pageNum--; queueRenderPage(pageNum); } }
+      function onNextPage() { if (pageNum < pdfDoc.numPages) { pageNum++; queueRenderPage(pageNum); } }
+      function onZoomIn() { scale += 0.2; queueRenderPage(pageNum); }
+      function onZoomOut() { if (scale > 0.4) { scale -= 0.2; queueRenderPage(pageNum); } }
+
+      document.getElementById('prev').addEventListener('click', onPrevPage);
+      document.getElementById('next').addEventListener('click', onNextPage);
+      document.getElementById('zoom_in').addEventListener('click', onZoomIn);
+      document.getElementById('zoom_out').addEventListener('click', onZoomOut);
+      document.getElementById('back').addEventListener('click', () => window.location.href = "/");
+
+      pdfjsLib.getDocument(url).promise.then(function(pdfDoc_) {
+        pdfDoc = pdfDoc_;
+        document.getElementById('page_count').textContent = pdfDoc.numPages;
+        renderPage(pageNum);
+      });
+    </script>
+  </body>
+</html>
